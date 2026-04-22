@@ -6,7 +6,6 @@
 import json
 import os
 import sys
-import time
 from datetime import datetime
 
 STATUS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "status.json")
@@ -39,6 +38,9 @@ def update_status(task=None, status=None, progress=None, emoji=None, log_msg=Non
             "level": log_level,
             "msg": log_msg,
         })
+        # Keep only last 20 log entries
+        if len(data["logs"]) > 20:
+            data["logs"] = data["logs"][-20:]
     if status == "running" and data.get("start_time") is None:
         data["start_time"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -66,16 +68,64 @@ def reset_status():
         "elapsed_sec": 0,
         "logs": [],
         "emoji": "💤",
+        "session_active": False,
     }
     with open(STATUS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     return data
 
 
-# ===== 命令行接口 =====
-# python update_status.py --task "编译" --status running --progress 50 --log "开始编译"
-# python update_status.py --reset
+def session_start(task="待命中"):
+    """会话开始"""
+    now_str = datetime.now().strftime("%H:%M:%S")
+    data = {
+        "task": task,
+        "status": "idle",
+        "progress": 0,
+        "start_time": None,
+        "elapsed_sec": 0,
+        "logs": [
+            {"time": now_str, "level": "info", "msg": "🟢 会话开始"}
+        ],
+        "emoji": "💤",
+        "session_active": True,
+    }
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
 
+
+def session_end():
+    """会话结束"""
+    data = {}
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    now_str = datetime.now().strftime("%H:%M:%S")
+    data["session_active"] = False
+    data["status"] = "idle"
+    data["progress"] = 0
+    if "logs" not in data:
+        data["logs"] = []
+    data["logs"].append({
+        "time": now_str,
+        "level": "info",
+        "msg": "🔴 会话结束",
+    })
+    # Keep only last 20
+    if len(data["logs"]) > 20:
+        data["logs"] = data["logs"][-20:]
+
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return data
+
+
+# ===== 命令行接口 =====
 if __name__ == "__main__":
     args = sys.argv[1:]
     kwargs = {}
@@ -84,6 +134,15 @@ if __name__ == "__main__":
         if args[i] == "--reset":
             reset_status()
             print("Status reset to idle")
+            sys.exit(0)
+        elif args[i] == "--session-start":
+            task = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("--") else "新会话"
+            session_start(task)
+            print("Session started")
+            sys.exit(0)
+        elif args[i] == "--session-end":
+            session_end()
+            print("Session ended")
             sys.exit(0)
         elif args[i].startswith("--"):
             key = args[i][2:]
@@ -113,11 +172,14 @@ if __name__ == "__main__":
         update_args["log_msg"] = kwargs["log"]
     if "log_level" in kwargs:
         update_args["log_level"] = kwargs["log_level"]
+    if "session_active" in kwargs:
+        update_args["session_active"] = kwargs["session_active"] == "true"
 
     if update_args:
         result = update_status(**update_args)
-        # Print ASCII-safe output to avoid encoding issues
         print(f"OK: {result.get('task', '?')} [{result.get('status', '?')}]")
     else:
         print("Usage: update_status.py --task NAME --status STATUS --progress N --emoji E --log MSG --log_level LEVEL")
         print("   or: update_status.py --reset")
+        print("   or: update_status.py --session-start [TASK]")
+        print("   or: update_status.py --session-end")

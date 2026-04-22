@@ -6,6 +6,7 @@
 - **Model:** qwen-bailian/qwen3.6-plus
 
 ## Key Principles
+- No matter what you do, you must first update the actions you are going to take and the completed results into the file. status.json Update Status
 - If something is hard for me but easy for Elbow (GUI tasks), interrupt and ask
 - When task is complete or need help, use 3-layer notification (beeps + desktop file + schtasks dialog)
 - PowerShell encoding: avoid inline Chinese in `-Command`, use `.ps1` files instead
@@ -16,6 +17,12 @@
 - **Retry limit**: If the same step fails 3+ times, STOP and ask Elbow for help
 - **Progressive communication**: Don't go silent. Report milestones (code written → compiling → installed → screenshot)
 - **Note long tasks**: When starting something that will take minutes, tell Elbow upfront
+
+### Status Board Rules (from 2026-04-21)
+- **if Receive a new task from user: No matter what you do, you must first update the actions you are going to take and the completed results into the file. status.json Update Status** Do not rely on cron,o not rely on this auto_pull
+- Each key step must update status.json ,using update_status.py or writing JSON directly
+- Update the final status when the task is completed so that users can see the complete process on the Status Board
+- Infinite loop detection is automatically handled by loop_detector.py, do not intervene manually
 
 ## DevEco Studio
 - Env vars: `DEVECO_SDK_HOME` and `JAVA_HOME` must be set

@@ -61,6 +61,10 @@ class StatusBoard(ctk.CTk):
             "emoji": "💤",
         }
 
+        # 本地实时计时器（每秒刷新，不依赖 JSON）
+        self.timer_start = None  # 任务开始时间（datetime）
+        self._timer_running = False
+
         # 拖拽支持
         self.drag_start_x = 0
         self.drag_start_y = 0
@@ -72,6 +76,10 @@ class StatusBoard(ctk.CTk):
         # 启动轮询线程
         self.polling = True
         Thread(target=self._poll_loop, daemon=True).start()
+
+        # 启动本地实时计时（每秒刷新）
+        self._timer_running = True
+        self._tick_timer()
 
     def _build_ui(self):
         # ===== 自定义标题栏 =====
@@ -260,9 +268,13 @@ class StatusBoard(ctk.CTk):
                     self.status_label.configure(text=label, text_color=color)
                     self.progress_bar.configure(progress_color=color)
                     self.progress_bar.set(min(progress / 100.0, 1.0))
-                    elapsed = data.get("elapsed_sec", 0)
-                    mins, secs = divmod(int(elapsed), 60)
-                    self.time_label.configure(text=f"⏱️ {mins:02d}:{secs:02d}")
+
+                    # 如果任务在运行，启动本地计时
+                    if status == "running":
+                        self.timer_start = datetime.now()
+                        elapsed = data.get("elapsed_sec", 0)
+                        mins, secs = divmod(int(elapsed), 60)
+                        self.time_label.configure(text=f"⏱️ {mins:02d}:{secs:02d}")
         except (json.JSONDecodeError, IOError):
             pass
 
@@ -285,6 +297,7 @@ class StatusBoard(ctk.CTk):
     def _update_ui(self, data: dict):
         """更新 UI（必须在主线程调用）"""
         old_logs_len = len(self.current_status.get("logs", []))
+        old_status = self.current_status.get("status", "idle")
 
         self.current_status.update(data)
 
@@ -292,6 +305,16 @@ class StatusBoard(ctk.CTk):
         task = data.get("task", "待命中")
         progress = data.get("progress", 0)
         emoji = data.get("emoji", STATUS_ICONS.get(status, "💤"))
+
+        # 任务开始时启动本地计时
+        if status == "running" and old_status != "running":
+            self.timer_start = datetime.now()
+
+        # 任务结束时停止计时
+        if status in ("success", "error", "idle") and self.timer_start is not None:
+            elapsed = int((datetime.now() - self.timer_start).total_seconds())
+            self.current_status["elapsed_sec"] = elapsed
+            # 不重置 timer_start，保持最终耗时显示
 
         # 更新状态卡片
         self.icon_label.configure(text=emoji)
@@ -301,10 +324,6 @@ class StatusBoard(ctk.CTk):
         self.status_label.configure(text=label, text_color=color)
         self.progress_bar.configure(progress_color=color)
         self.progress_bar.set(min(progress / 100.0, 1.0))
-
-        elapsed = data.get("elapsed_sec", 0)
-        mins, secs = divmod(int(elapsed), 60)
-        self.time_label.configure(text=f"⏱️ {mins:02d}:{secs:02d}")
 
         # 更新日志 - 只添加新条目
         logs = data.get("logs", [])
@@ -361,6 +380,23 @@ class StatusBoard(ctk.CTk):
         ).pack(side="left", fill="x", expand=True)
 
         self.log_widgets.append(row)
+
+    def _tick_timer(self):
+        """本地实时计时，每秒刷新一次，不依赖 JSON 更新"""
+        if not self._timer_running:
+            return
+
+        if self.timer_start is not None:
+            elapsed = int((datetime.now() - self.timer_start).total_seconds())
+            mins, secs = divmod(elapsed, 60)
+            hours, mins = divmod(mins, 60)
+            if hours > 0:
+                text = f"⏱️ {hours:02d}:{mins:02d}:{secs:02d}"
+            else:
+                text = f"⏱️ {mins:02d}:{secs:02d}"
+            self.time_label.configure(text=text)
+
+        self.after(1000, self._tick_timer)
 
     def _scroll_to_bottom(self):
         """滚动到日志最底部"""
