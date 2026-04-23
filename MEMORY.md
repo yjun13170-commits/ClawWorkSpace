@@ -17,6 +17,7 @@
 - **Retry limit**: If the same step fails 3+ times, STOP and ask Elbow for help
 - **Progressive communication**: Don't go silent. Report milestones (code written → compiling → installed → screenshot)
 - **Note long tasks**: When starting something that will take minutes, tell Elbow upfront
+- **Per-turn visibility** (2026-04-22): Elbow wants to see every turn's progress on the status board. When he sends a message, immediately update status with what I'm about to do. Each significant action within that turn gets a log entry.
 
 ### Status Board Rules (from 2026-04-21)
 - **if Receive a new task from user: No matter what you do, you must first update the actions you are going to take and the completed results into the file. status.json Update Status** Do not rely on cron,o not rely on this auto_pull
@@ -40,9 +41,11 @@
 **RULE: Log EVERYTHING. Every action, every command, every result, every next step.**
 Not limited to specific milestones — faithfully record everything I do so Elbow can watch in real-time.
 
+**Granularity preference (2026-04-22):** Key actions (read/write/execute/result) each get a log entry. No need to log every trivial sub-step, but Elbow should see meaningful progress after each turn.
+
 Every work task must update status:
 1. Start: `--reset` then `--task NAME --status running --progress 10 --log MSG`
-2. Each action: `--status running --progress N --log MSG` (every command, every result, every decision)
+2. Each action: `--status running --progress N --log MSG` (read file, run command, get result)
 3. Command output: `--log MSG` with the actual result (success/fail/error details)
 4. Next step: `--log MSG` describing what I'm about to do next
 5. Compile: `--status running --progress 50 --log MSG`
@@ -50,6 +53,13 @@ Every work task must update status:
 7. Waiting Elbow: `--status waiting_elbow --progress 90 --log MSG --log_level warning`
 8. Done: `--status success --progress 100 --log MSG --log_level success`
 9. Reset: `--reset`
+
+### Timer fix (2026-04-22)
+- When task completes (success/error), status_board.py now:
+  1. Records elapsed time as a log entry ("⏱️ 任务耗时: XX:XX")
+  2. Saves it back to status.json
+  3. Stops the local timer (`timer_start = None`) so display freezes
+- Deduplication: if `update_status.py` already wrote the elapsed log, board won't duplicate it
 
 ### Status values
 - `idle` / `running` / `success` / `error` / `waiting_elbow`

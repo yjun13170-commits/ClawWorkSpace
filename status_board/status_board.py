@@ -311,10 +311,38 @@ class StatusBoard(ctk.CTk):
             self.timer_start = datetime.now()
 
         # 任务结束时停止计时
-        if status in ("success", "error", "idle") and self.timer_start is not None:
+        if status in ("success", "error", "idle") and old_status == "running" and self.timer_start is not None:
             elapsed = int((datetime.now() - self.timer_start).total_seconds())
             self.current_status["elapsed_sec"] = elapsed
-            # 不重置 timer_start，保持最终耗时显示
+            # 计算耗时字符串
+            mins, secs = divmod(elapsed, 60)
+            hours, mins_rem = divmod(mins, 60)
+            if hours > 0:
+                elapsed_str = f"{hours:02d}:{mins_rem:02d}:{secs:02d}"
+            else:
+                elapsed_str = f"{mins_rem:02d}:{secs:02d}"
+            # 去重：如果 update_status.py 已写入耗时日志则不再追加
+            data.setdefault("logs", [])
+            has_elapsed = any("任务耗时" in entry.get("msg", "") for entry in data["logs"])
+            if not has_elapsed:
+                now_str = datetime.now().strftime("%H:%M:%S")
+                data["logs"].append({
+                    "time": now_str,
+                    "level": "info",
+                    "msg": f"⏱️ 任务耗时: {elapsed_str}",
+                })
+                if len(data["logs"]) > 20:
+                    data["logs"] = data["logs"][-20:]
+                # 保存回 status.json
+                try:
+                    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                except IOError:
+                    pass
+            # 停止计时器
+            self.timer_start = None
+            # 显示最终耗时
+            self.time_label.configure(text=f"⏱️ {elapsed_str}")
 
         # 更新状态卡片
         self.icon_label.configure(text=emoji)

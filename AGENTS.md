@@ -13,8 +13,84 @@ Before doing anything else:
 2. Read `USER.md` — this is who you're helping
 3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
 4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+5. if you Received a new task from user, No matter what you do, you will first update the actions you are going to take and the completed results into the file **status.json** to update your status on the status board.
 
 Don't ask permission. Just do it.
+
+## 📌 Supreme Rule: Status Board Updates in Real-Time
+
+**No matter what task you're doing, you MUST update `status_board/status.json` first. Elbow watches the board — keep it alive. Never skip this.**
+
+### How to Update
+
+**CLI (recommended):**
+```bash
+# Python path
+C:\Users\hci\AppData\Local\Programs\Python\Python312\python.exe
+
+# Script path
+status_board/update_status.py
+```
+
+```bash
+# Task start: reset first, then set
+python update_status.py --reset
+python update_status.py --task "Task Name" --status running --progress 10 --log "Starting..."
+
+# Every step along the way
+python update_status.py --status running --progress 30 --log "Compiling..."
+python update_status.py --status running --progress 60 --log "Compiled, installing..."
+
+# Done
+python update_status.py --status success --progress 100 --log "Task complete" --log_level success
+
+# Need Elbow's input
+python update_status.py --status waiting_elbow --progress 90 --log "Waiting for confirmation" --log_level warning
+
+# Error
+python update_status.py --status error --log "Error details" --log_level error
+```
+
+### Standard Workflow
+
+```
+Received task → --reset → set task/running/log (progress 10)
+   ↓
+Each step → update progress + log (record success/fail/next step)
+   ↓
+Key milestones → write actual command output to log
+   ↓
+Done → status=success, progress=100, log_level=success
+     or Waiting → status=waiting_elbow, log_level=warning
+     or Failed → status=error, log_level=error
+```
+
+### status.json Fields
+
+| Field | Value |
+|-------|-------|
+| `task` | Task name (string) |
+| `status` | `idle` / `running` / `success` / `error` / `waiting_elbow` |
+| `progress` | 0-100 (int) |
+| `emoji` | Status emoji (💤 when idle) |
+| `logs` | Log array `[{time, level, msg}]`, max 20 entries |
+| `start_time` | ISO timestamp (elapsed_sec auto-calculated) |
+
+### Hard Rules
+
+- **First thing on new task: `--reset` then set `--task` and `--status running`**
+- **Every single step gets a log entry** — commands, results, next steps
+- **Don't just log milestones** — record every command's output
+- **Long tasks need periodic updates** — don't let progress stall on the same number for minutes
+- **Always update final status** when done (success/error/waiting_elbow)
+- **Log EVERYTHING** — faithfully record everything you do
+
+### log_level Values
+
+- `info` — normal progress
+- `success` — success milestone (shown in green)
+- `warning` — attention/waiting needed (shown in yellow)
+- `error` — failure/error (shown in red)
 
 ## Memory
 
